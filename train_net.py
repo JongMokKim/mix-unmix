@@ -7,7 +7,7 @@ from detectron2.config import get_cfg
 from detectron2.engine import default_argument_parser, default_setup, launch
 
 from mum import add_ubteacher_config
-from mum.engine.trainer import UBTeacherTrainer, BaselineTrainer, MyTrainer
+from mum.engine.trainer import UBTeacherTrainer, BaselineTrainer, MUMTrainer
 
 # hacky way to register
 from mum.modeling.meta_arch.rcnn import TwoStagePseudoLabGeneralizedRCNN
@@ -39,13 +39,13 @@ def main(args):
         Trainer = UBTeacherTrainer
     elif cfg.SEMISUPNET.Trainer == "baseline":
         Trainer = BaselineTrainer
-    elif cfg.SEMISUPNET.Trainer == "jm":
-        Trainer = MyTrainer
+    elif cfg.SEMISUPNET.Trainer == "mum":
+        Trainer = MUMTrainer
     else:
         raise ValueError("Trainer Name is not found.")
 
     if args.eval_only:
-        if cfg.SEMISUPNET.Trainer == "ubteacher":
+        if cfg.SEMISUPNET.Trainer == "ubteacher" or cfg.SEMISUPNET.Trainer=='mum':
             model = Trainer.build_model(cfg)
             model_teacher = Trainer.build_model(cfg)
             ensem_ts_model = EnsembleTSModel(model_teacher, model)

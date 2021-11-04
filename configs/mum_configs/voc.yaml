@@ -33,7 +33,7 @@ DATASETS:
   TRAIN_UNLABEL: ("voc_2012_trainval",)
   TEST: ("voc_2007_test",)
 SEMISUPNET:
-  Trainer: "jm"
+  Trainer: "mum"
   BBOX_THRESHOLD: 0.7
   TEACHER_UPDATE_ITER: 1
   BURN_UP_STEP: 0

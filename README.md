@@ -1,64 +1,59 @@
 # Installtion & Setup
-Follow the installtion process of Unbiased Teacher official repo (https://github.com/facebookresearch/unbiased-teacher)
-
-<details>
-<summary>Install guideline</summary>
-<div markdown="1">
+We follow the installation precess of Unbiased Teacher official repo (https://github.com/facebookresearch/unbiased-teacher)
 
 ### Prerequisites
 
 - Linux or macOS with Python ≥ 3.6
 - PyTorch ≥ 1.5 and torchvision that matches the PyTorch installation.
 
-### Install PyTorch in Conda env
+### Build Detectron2 from Source
+- We find the latest(v0.6) package of Detectron2 occur the error with our code.
+- Therefore, please install the matched(v0.5) version of Detectron2 as follows:
 
 ```shell
-# create conda env
-conda create -n detectron2 python=3.6
-# activate the enviorment
-conda activate detectron2
-# install PyTorch >=1.5 with GPU
-conda install pytorch torchvision -c pytorch
+# get the Detectron2 v0.5 package
+wget https://github.com/facebookresearch/detectron2/archive/refs/tags/v0.5.zip
+
+# unzip
+unzip v0.5.zip
+
+# install
+python -m pip install -e detectron2-0.5
+
 ```
 
-### Build Detectron2 from Source
 
-Follow the [INSTALL.md](https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md) to install Detectron2.
-
-### Install Timm for Swin Backbone
+### Install other requirements
 ```shell
 # install timm for SwinTransformer
-pip install timm
+pip install -r requirements.txt
 ```
 
 ### Dataset download
 
-1. Download COCO dataset
-
-```shell
-# download images
-wget http://images.cocodataset.org/zips/train2017.zip
-wget http://images.cocodataset.org/zips/val2017.zip
-
-# download annotations
-wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
-```
+1. Download COCO & VOC dataset
 
 2. Organize the dataset as following:
 
 ```shell
-unbiased_teacher/
+mix-unmix/
 └── datasets/
-    └── coco/
-        ├── train2017/
-        ├── val2017/
-        └── annotations/
-        	├── instances_train2017.json
-        	└── instances_val2017.json
-```
+    ├── coco/
+    │   ├── train2017/
+    │   ├── val2017/
+    │   └── annotations/
+    │   	├── instances_train2017.json
+    │   	└── instances_val2017.json
+    ├── VOC2007
+    │   ├── Annotations
+    │   ├── ImageSets
+    │   └── JPEGImages
+    └── VOC2012
+        ├── Annotations
+        ├── ImageSets
+        └── JPEGImages
 
-</div>
-</details>
+```
 
 # Evaluation
 
@@ -71,6 +66,12 @@ unbiased_teacher/
 | R50-FPN |     VOC07 (VOC12)       |  78.94  | 50.22 | [link](https://drive.google.com/file/d/1HVAMThGp9SR5BpmQEBFautuF_pQlkkQW/view?usp=sharing) |
 | R50-FPN |     VOC07 (VOC12 / COCO20cls)  | 80.46 | 52.31 | [link](https://drive.google.com/file/d/1Ywlnnxfi3fYwZK5jZKY7a8E7R0KP1SUs/view?usp=sharing) |
 | Swin    |     COCO-Standard 0.5%    | 33.98 | 16.74 | [link](https://drive.google.com/file/d/19q73qCw1XGTWhmHrFTtr-PxbNTXnJUy0/view?usp=sharing) |
+
+21.891 / 40.056
+42.112 / 63.304
+50.216 / 78.935
+52.31 / 80.45
+
 
 
 - Run Evaluation w/ R50 in COCO
@@ -123,6 +124,26 @@ python train_net.py \
 python train_net.py \
       --num-gpus 4 \
       --config configs/mum_configs/coco_swin.yaml \
+```
+
+## Swin 
+- Download ImageNet pretrained weight of swin-t in [link](https://drive.google.com/file/d/1j95KPUoVl1PK49yxpQOvigKHcl2eTt5B/view?usp=sharing)
+```shell
+# mv pretrained weight to weights folder
+mv swin_tiny_patch4_window7_224.pth weights/
+
+# Evaluate in COCO
+python train_net.py \
+      --eval-only \
+      --num-gpus 4 \
+      --config configs/mum_configs/coco_swin.yaml \
+      MODEL.WEIGHTS <your weight>.pth
+      
+# Train under 0.5% COCO-supervision
+python train_net.py \
+      --num-gpus 4 \
+      --config configs/mum_configs/coco_swin.yaml \
+
 ```
 
 ## Mix/UnMix code block

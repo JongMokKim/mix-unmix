@@ -133,23 +133,10 @@ class BaselineTrainer(DefaultTrainer):
         data = next(self._trainer._data_loader_iter)
         data_time = time.perf_counter() - start
 
-        # loss_dict = self.model(data)
-
         if self.cfg.SEMISUPNET.TUTprob > random.random():
             loss_dict = self.model(data, True, self.cfg.SEMISUPNET.TS, self.cfg.MODEL.BACKBONE.TUT_LAYER, self.cfg.SEMISUPNET.TUTprob)
         else:
             loss_dict = self.model(data)
-
-        # num_gt_bbox = 0.0
-        # for element in data:
-        #     num_gt_bbox += len(element["instances"])
-        # num_gt_bbox = num_gt_bbox / len(data)
-        # record_dict["bbox_num/gt_bboxes"] = num_gt_bbox
-        #
-        # loss_dict = {}
-        # for key in record_dict.keys():
-        #     if key[:4] == "loss" and key[-3:] != "val":
-        #         loss_dict[key] = record_dict[key]
 
         losses = sum(loss_dict.values())
 
@@ -735,11 +722,8 @@ class UBTeacherTrainer(DefaultTrainer):
             ret.append(hooks.PeriodicWriter(self.build_writers(), period=20))
         return ret
 
-
-
-#####################################GI + Tiling ##################################################
-
-class MyTrainer(DefaultTrainer):
+#####################################Our MUM Trainer ##################################################
+class MUMTrainer(DefaultTrainer):
     def __init__(self, cfg):
         """
         Args:
@@ -748,7 +732,7 @@ class MyTrainer(DefaultTrainer):
         with matching heuristics.
         """
 
-        ## My Customs########################################
+        ## My Customs ########################################
         self.semi_args = cfg.SEMISUPNET
         self.ubs = cfg.SOLVER.IMG_PER_BATCH_UNLABEL
 

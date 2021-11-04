@@ -438,7 +438,7 @@ class PatchEmbed(nn.Module):
 
 @BACKBONE_REGISTRY.register()
 class MySwin(Backbone):
-    def __init__(self, cfg, input_shape, pretrained='model_farm/swin_tiny_patch4_window7_224.pth'):
+    def __init__(self, cfg, input_shape, pretrained='weights/swin_tiny_patch4_window7_224.pth'):
         super().__init__()
 
         ## get cfg

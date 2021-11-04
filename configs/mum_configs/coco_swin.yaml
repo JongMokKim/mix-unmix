@@ -27,7 +27,7 @@ DATASETS:
   TRAIN: ("coco_2017_train",)
   TEST: ("coco_2017_val",)
 SEMISUPNET:
-  Trainer: "jm"
+  Trainer: "mum"
   BBOX_THRESHOLD: 0.7
   TEACHER_UPDATE_ITER: 1
   BURN_UP_STEP: 2000
