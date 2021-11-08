@@ -39,9 +39,9 @@ SEMISUPNET:
   BURN_UP_STEP: 0
   EMA_KEEP_RATE: 0.9996
   UNSUP_LOSS_WEIGHT: 4.0
-  TYPE: "tile_reassemble"
-  TS: 4
+  TYPE: "mix_unmix"
   NT: 4
+  NG: 4
   TILE_PROP: 1.
   SUPTILE: False
   INIT_MOMENTUM: False

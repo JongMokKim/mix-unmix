@@ -264,7 +264,6 @@ class BaselineTrainer(DefaultTrainer):
             if len(metrics_dict) > 1:
                 self.storage.put_scalars(**metrics_dict)
 
-
 # Unbiased Teacher Trainer
 class UBTeacherTrainer(DefaultTrainer):
     def __init__(self, cfg):
@@ -872,12 +871,8 @@ class MUMTrainer(DefaultTrainer):
                     self.before_step()
                     if self.semi_args.TYPE == 'base':
                         self.run_step_full_semisup()
-                    elif self.semi_args.TYPE == 'tile_reassemble_gi':
-                        self.run_step_full_semisup_tile_reassemble_gi()
-                    elif self.semi_args.TYPE == 'tile_reassemble':
-                        self.run_step_full_semisup_tile_reassemble()
-                    elif self.semi_args.TYPE == 'tile':
-                        self.run_step_full_semisup_tile()
+                    elif self.semi_args.TYPE == 'mix_unmix':
+                        self.run_step_full_semisup_mix_unmix()
 
                     self.after_step()
             except Exception:
@@ -956,7 +951,8 @@ class MUMTrainer(DefaultTrainer):
     # =====================================================
     # =================== Training Flow ===================
     # =====================================================
-    def run_step_full_semisup_tile(self):
+
+    def run_step_full_semisup_mix_unmix(self):
         self._trainer.iter = self.iter
         assert self.model.training, "[UBTeacherTrainer] model was changed to eval mode!"
         start = time.perf_counter()
@@ -969,282 +965,6 @@ class MUMTrainer(DefaultTrainer):
         # remove unlabeled data labels
         unlabel_data_q = self.remove_label(unlabel_data_q)
         unlabel_data_k = self.remove_label(unlabel_data_k)
-
-        # burn-in stage (supervised training with labeled data)
-        if self.iter < self.cfg.SEMISUPNET.BURN_UP_STEP:
-
-            # input both strong and weak supervised data into model
-            label_data_q.extend(label_data_k)
-            record_dict, _, _, _ = self.model(
-                label_data_q, branch="supervised")
-
-            # weight losses
-            loss_dict = {}
-            for key in record_dict.keys():
-                if key[:4] == "loss":
-                    loss_dict[key] = record_dict[key] * 1
-            losses = sum(loss_dict.values())
-
-        else:
-            if self.iter == self.cfg.SEMISUPNET.BURN_UP_STEP:
-                # update copy the the whole model
-                self._update_teacher_model(keep_rate=0.00)
-
-            elif (
-                self.iter - self.cfg.SEMISUPNET.BURN_UP_STEP
-            ) % self.cfg.SEMISUPNET.TEACHER_UPDATE_ITER == 0:
-                self._update_teacher_model(
-                    keep_rate=self.cfg.SEMISUPNET.EMA_KEEP_RATE)
-
-            # tile for unlabel_q and unlabel_k
-            tile_mask = torch.argsort(torch.rand(len(unlabel_data_k) // self.semi_args.NT, self.semi_args.NT, self.semi_args.TS, self.semi_args.TS), dim=1).cuda()
-
-            record_dict = {}
-            #  generate the pseudo-label using teacher model
-            # note that we do not convert to eval mode, as 1) there is no gradient computed in
-            # teacher model and 2) batch norm layers are not updated as well
-            with torch.no_grad():
-                (
-                    _,
-                    proposals_rpn_unsup_k,
-                    proposals_roih_unsup_k,
-                    _,
-                ) = self.model_teacher(unlabel_data_k, branch="unsup_data_weak", tile_mask=tile_mask, nt=self.semi_args.NT, ts=self.semi_args.TS)
-
-            #  Pseudo-labeling
-            cur_threshold = self.cfg.SEMISUPNET.BBOX_THRESHOLD
-
-            joint_proposal_dict = {}
-            joint_proposal_dict["proposals_rpn"] = proposals_rpn_unsup_k
-            (
-                pesudo_proposals_rpn_unsup_k,
-                nun_pseudo_bbox_rpn,
-            ) = self.process_pseudo_label(
-                proposals_rpn_unsup_k, cur_threshold, "rpn", "thresholding"
-            )
-            joint_proposal_dict["proposals_pseudo_rpn"] = pesudo_proposals_rpn_unsup_k
-            # Pseudo_labeling for ROI head (bbox location/objectness)
-            pesudo_proposals_roih_unsup_k, _ = self.process_pseudo_label(
-                proposals_roih_unsup_k, cur_threshold, "roih", "thresholding"
-            )
-            joint_proposal_dict["proposals_pseudo_roih"] = pesudo_proposals_roih_unsup_k
-
-            #  add pseudo-label to unlabeled data
-
-            unlabel_data_q = self.add_label(
-                unlabel_data_q, joint_proposal_dict["proposals_pseudo_roih"]
-            )
-            unlabel_data_k = self.add_label(
-                unlabel_data_k, joint_proposal_dict["proposals_pseudo_roih"]
-            )
-
-            all_label_data = label_data_q + label_data_k
-            all_unlabel_data = unlabel_data_q
-
-            record_all_label_data, _, _, _ = self.model(
-                all_label_data, branch="supervised"
-            )
-            record_dict.update(record_all_label_data)
-            record_all_unlabel_data, _, _, _ = self.model(
-                all_unlabel_data, branch="supervised", tile_mask=tile_mask, nt=self.semi_args.NT, ts=self.semi_args.TS
-            )
-            new_record_all_unlabel_data = {}
-            for key in record_all_unlabel_data.keys():
-                new_record_all_unlabel_data[key + "_pseudo"] = record_all_unlabel_data[
-                    key
-                ]
-            record_dict.update(new_record_all_unlabel_data)
-
-            # weight losses
-            loss_dict = {}
-            for key in record_dict.keys():
-                if key[:4] == "loss":
-                    if key == "loss_rpn_loc_pseudo" or key == "loss_box_reg_pseudo":
-                        # pseudo bbox regression <- 0
-                        loss_dict[key] = record_dict[key] * 0
-                    elif key[-6:] == "pseudo":  # unsupervised loss
-                        loss_dict[key] = (
-                            record_dict[key] *
-                            self.cfg.SEMISUPNET.UNSUP_LOSS_WEIGHT
-                        )
-                    else:  # supervised loss
-                        loss_dict[key] = record_dict[key] * 1
-
-            losses = sum(loss_dict.values())
-
-        metrics_dict = record_dict
-        metrics_dict["data_time"] = data_time
-        self._write_metrics(metrics_dict)
-
-        self.optimizer.zero_grad()
-        losses.backward()
-        self.optimizer.step()
-
-
-    def run_step_full_semisup_tile_reassemble_gi(self):
-        self._trainer.iter = self.iter
-        assert self.model.training, "[UBTeacherTrainer] model was changed to eval mode!"
-        start = time.perf_counter()
-        data = next(self._trainer._data_loader_iter)
-        # data_q and data_k from different augmentations (q:strong, k:weak)
-        # label_strong, label_weak, unlabed_strong, unlabled_weak
-        label_data_q, label_data_k, unlabel_data_q, unlabel_data_k = data
-        data_time = time.perf_counter() - start
-
-        # remove unlabeled data labels
-        unlabel_data_q = self.remove_label(unlabel_data_q)
-        unlabel_data_k = self.remove_label(unlabel_data_k)
-
-        # burn-in stage (supervised training with labeled data)
-        if self.iter < self.cfg.SEMISUPNET.BURN_UP_STEP:
-
-            # input both strong and weak supervised data into model
-            label_data_q.extend(label_data_k)
-            record_dict, _, _, _ = self.model(
-                label_data_q, branch="supervised")
-
-            # weight losses
-            loss_dict = {}
-            for key in record_dict.keys():
-                if key[:4] == "loss":
-                    loss_dict[key] = record_dict[key] * 1
-            losses = sum(loss_dict.values())
-
-        else:
-            if self.iter == self.cfg.SEMISUPNET.BURN_UP_STEP:
-                # update copy the the whole model
-                self._update_teacher_model(keep_rate=0.00)
-
-            elif (
-                self.iter - self.cfg.SEMISUPNET.BURN_UP_STEP
-            ) % self.cfg.SEMISUPNET.TEACHER_UPDATE_ITER == 0:
-                self._update_teacher_model(
-                    keep_rate=self.cfg.SEMISUPNET.EMA_KEEP_RATE)
-
-            record_dict = {}
-            #  generate the pseudo-label using teacher model
-            # note that we do not convert to eval mode, as 1) there is no gradient computed in
-            # teacher model and 2) batch norm layers are not updated as well
-            with torch.no_grad():
-                (
-                    features_unsup_k,
-                    proposals_rpn_unsup_k,
-                    proposals_roih_unsup_k,
-                    _,
-                ) = self.model_teacher(unlabel_data_k, branch="unsup_data_weak")
-
-            # ##########################################
-            # # Debug
-            # for k in proposals_rpn_unsup_k:
-            #     print(k)
-            #
-            #     try:
-            #         print(k.shape)
-            #     except:
-            #         print('NO shape of value')
-            #
-            # print(len(proposals_rpn_unsup_k))
-            # print(proposals_rpn_unsup_k.proposal_boxes.tensor)
-            # print(proposals_rpn_unsup_k.objectness_logits)
-            #
-            # raise RuntimeError('hi')
-            # ##########################################
-
-            #  Pseudo-labeling
-            cur_threshold = self.cfg.SEMISUPNET.BBOX_THRESHOLD
-
-            joint_proposal_dict = {}
-            joint_proposal_dict["proposals_rpn"] = proposals_rpn_unsup_k
-            (
-                pesudo_proposals_rpn_unsup_k,
-                nun_pseudo_bbox_rpn,
-            ) = self.process_pseudo_label(
-                proposals_rpn_unsup_k, cur_threshold, "rpn", "thresholding"
-            )
-            joint_proposal_dict["proposals_pseudo_rpn"] = pesudo_proposals_rpn_unsup_k
-            # Pseudo_labeling for ROI head (bbox location/objectness)
-            pesudo_proposals_roih_unsup_k, _ = self.process_pseudo_label(
-                proposals_roih_unsup_k, cur_threshold, "roih", "thresholding"
-            )
-            joint_proposal_dict["proposals_pseudo_roih"] = pesudo_proposals_roih_unsup_k
-
-            #  add pseudo-label to unlabeled data
-
-            unlabel_data_q = self.add_label(
-                unlabel_data_q, joint_proposal_dict["proposals_pseudo_roih"]
-            )
-            unlabel_data_k = self.add_label(
-                unlabel_data_k, joint_proposal_dict["proposals_pseudo_roih"]
-            )
-
-            all_label_data = label_data_q + label_data_k
-            all_unlabel_data = unlabel_data_q
-
-            record_all_label_data, _, _, _ = self.model(
-                all_label_data, branch="supervised"
-            )
-            record_dict.update(record_all_label_data)
-            record_all_unlabel_data, _, _, _ = self.model(
-                all_unlabel_data,
-                branch="supervised_tile_reassemble_gi",
-                ts=self.semi_args.TS, nt=self.semi_args.NT,
-                features_unsup_k=features_unsup_k, proposals_unsup_k=proposals_rpn_unsup_k, roi_pooler=self.roi_pooler,
-                f_list = self.f_list, lambda_feat = self.semi_args.LAMBDA_FEAT, gi_type=self.semi_args.GI_TYPE, lambda_rel=self.semi_args.LAMBDA_REL
-            )
-            new_record_all_unlabel_data = {}
-            for key in record_all_unlabel_data.keys():
-                new_record_all_unlabel_data[key + "_pseudo"] = record_all_unlabel_data[
-                    key
-                ]
-            record_dict.update(new_record_all_unlabel_data)
-
-            # weight losses
-            loss_dict = {}
-            for key in record_dict.keys():
-                if key[:4] == "loss":
-                    if key == "loss_rpn_loc_pseudo" or key == "loss_box_reg_pseudo":
-                        # pseudo bbox regression <- 0
-                        loss_dict[key] = record_dict[key] * 0
-                    elif key[-6:] == "pseudo":  # unsupervised loss
-                        loss_dict[key] = (
-                            record_dict[key] *
-                            self.cfg.SEMISUPNET.UNSUP_LOSS_WEIGHT
-                        )
-                    else:  # supervised loss
-                        loss_dict[key] = record_dict[key] * 1
-
-            losses = sum(loss_dict.values())
-
-        metrics_dict = record_dict
-        metrics_dict["data_time"] = data_time
-        self._write_metrics(metrics_dict)
-
-        self.optimizer.zero_grad()
-        losses.backward()
-        self.optimizer.step()
-
-    def run_step_full_semisup_tile_reassemble(self):
-        self._trainer.iter = self.iter
-        assert self.model.training, "[UBTeacherTrainer] model was changed to eval mode!"
-        start = time.perf_counter()
-        data = next(self._trainer._data_loader_iter)
-        # data_q and data_k from different augmentations (q:strong, k:weak)
-        # label_strong, label_weak, unlabed_strong, unlabled_weak
-        label_data_q, label_data_k, unlabel_data_q, unlabel_data_k = data
-        data_time = time.perf_counter() - start
-
-        # remove unlabeled data labels
-        unlabel_data_q = self.remove_label(unlabel_data_q)
-        unlabel_data_k = self.remove_label(unlabel_data_k)
-
-        # ## data tiling
-        # print(len(unlabel_data_q))
-        # for k, v in unlabel_data_q[0].items():
-        #     print(k, v)
-        #     if k=='image':
-        #         print(v.shape)
-        #
-        # bs, c, h, w = unlabel_data_q[0]['image'].shape
 
         # burn-in stage (supervised training with labeled data)
         if self.iter < self.cfg.SEMISUPNET.BURN_UP_STEP:
@@ -1253,12 +973,12 @@ class MUMTrainer(DefaultTrainer):
             label_data_q.extend(label_data_k)
             p = random.random()
             if self.cfg.SEMISUPNET.SUPTILE and p < self.semi_args.SUPTILE_PROP:
-                tile_mask = torch.argsort(
-                    torch.rand(len(label_data_q) // self.semi_args.NT, self.semi_args.NT, self.semi_args.TS,
-                               self.semi_args.TS), dim=1).cuda()
+                mix_mask = torch.argsort(
+                    torch.rand(len(label_data_q) // self.semi_args.NG, self.semi_args.NG, self.semi_args.NT,
+                               self.semi_args.NT), dim=1).cuda()
 
                 record_dict, _, _, _ = self.model(
-                    label_data_q, tile_mask=tile_mask, ts=self.semi_args.TS, nt=self.semi_args.NT, branch="supervised")
+                    label_data_q, mix_mask=mix_mask, nt=self.semi_args.NT, ng=self.semi_args.NG, branch="supervised")
             else:
                 record_dict, _, _, _ = self.model(
                     label_data_q, branch="supervised")
@@ -1274,15 +994,6 @@ class MUMTrainer(DefaultTrainer):
             if self.iter == self.cfg.SEMISUPNET.BURN_UP_STEP:
                 # update copy the the whole model
                 self._update_teacher_model(keep_rate=0.00)
-                if self.semi_args.INIT_MOMENTUM:
-                    for group in self.optimizer.param_groups:
-                        for p in group['params']:
-                            if p.grad is not None:
-                                state = self.optimizer.state[p]
-                                # print(state['momentum_buffer'].mean(), state['momentum_buffer'].shape)
-                                state['momentum_buffer'] = torch.zeros_like(state['momentum_buffer']).cuda()
-                                # print(state['momentum_buffer'].mean(), state['momentum_buffer'].shape)
-                    # raise RuntimeError('Check Momentum in loop')
 
             elif (
                 self.iter - self.cfg.SEMISUPNET.BURN_UP_STEP
@@ -1325,13 +1036,13 @@ class MUMTrainer(DefaultTrainer):
             joint_proposal_dict["proposals_pseudo_roih"] = pesudo_proposals_roih_unsup_k
 
             #  add pseudo-label to unlabeled data
-
             unlabel_data_q = self.add_label(
                 unlabel_data_q, joint_proposal_dict["proposals_pseudo_roih"]
             )
-            unlabel_data_k = self.add_label(
-                unlabel_data_k, joint_proposal_dict["proposals_pseudo_roih"]
-            )
+
+            # unlabel_data_k = self.add_label(
+            #     unlabel_data_k, joint_proposal_dict["proposals_pseudo_roih"]
+            # )
 
             all_label_data = label_data_q + label_data_k
             all_unlabel_data = unlabel_data_q
@@ -1341,7 +1052,7 @@ class MUMTrainer(DefaultTrainer):
             )
             record_dict.update(record_all_label_data)
             record_all_unlabel_data, _, _, _ = self.model(
-                all_unlabel_data, branch="supervised_tile_reassemble", ts=self.semi_args.TS, nt=self.semi_args.NT,
+                all_unlabel_data, branch="supervised_mix_unmix", nt=self.semi_args.NT, ng=self.semi_args.NG,
                 tile_prop=self.semi_args.TILE_PROP
             )
             new_record_all_unlabel_data = {}

@@ -33,9 +33,9 @@ SEMISUPNET:
   BURN_UP_STEP: 2000
   EMA_KEEP_RATE: 0.999
   UNSUP_LOSS_WEIGHT: 4.0
-  TYPE: "tile_reassemble"
-  TS: 4
+  TYPE: "mix_unmix"
   NT: 4
+  NG: 4
   DYNAMIC_EMA: 0
 TEST:
   EVAL_PERIOD: 1000

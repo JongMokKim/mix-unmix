@@ -25,7 +25,6 @@ python -m pip install -e detectron2-0.5
 
 ### Install other requirements
 ```shell
-# install timm for SwinTransformer
 pip install -r requirements.txt
 ```
 
@@ -61,25 +60,18 @@ mix-unmix/
 
 |  Backbone  | Protocols |         AP50  |  AP50:95      |                                       Model Weights                                        |
 | :-----: | :---------: | :---: | :---: | :----------------------------------------------------------------------------------------: |
-| R50-FPN |     COCO-Standard 1%       | 40.05 | 21.887 | [link](https://drive.google.com/file/d/1NxHjtz4ioFnCfRJSxskqP_zkbnWVnIeu/view?usp=sharing) |
-| R50-FPN |     COCO-Additional       |  63.31 | 42.12 | [link](https://drive.google.com/file/d/1GhQlkurzdRAngdMp6Ut492TYD2AN20XB/view?usp=sharing) |
+| R50-FPN |     COCO-Standard 1%       | 40.06 | 21.89 | [link](https://drive.google.com/file/d/1NxHjtz4ioFnCfRJSxskqP_zkbnWVnIeu/view?usp=sharing) |
+| R50-FPN |     COCO-Additional       |  63.30 | 42.11 | [link](https://drive.google.com/file/d/1GhQlkurzdRAngdMp6Ut492TYD2AN20XB/view?usp=sharing) |
 | R50-FPN |     VOC07 (VOC12)       |  78.94  | 50.22 | [link](https://drive.google.com/file/d/1HVAMThGp9SR5BpmQEBFautuF_pQlkkQW/view?usp=sharing) |
-| R50-FPN |     VOC07 (VOC12 / COCO20cls)  | 80.46 | 52.31 | [link](https://drive.google.com/file/d/1Ywlnnxfi3fYwZK5jZKY7a8E7R0KP1SUs/view?usp=sharing) |
-| Swin    |     COCO-Standard 0.5%    | 33.98 | 16.74 | [link](https://drive.google.com/file/d/19q73qCw1XGTWhmHrFTtr-PxbNTXnJUy0/view?usp=sharing) |
-
-21.891 / 40.056
-42.112 / 63.304
-50.216 / 78.935
-52.31 / 80.45
-33.987 / 16.744
-
+| R50-FPN |     VOC07 (VOC12 / COCO20cls)  | 80.45 | 52.31 | [link](https://drive.google.com/file/d/1Ywlnnxfi3fYwZK5jZKY7a8E7R0KP1SUs/view?usp=sharing) |
+| Swin    |     COCO-Standard 0.5%    | 33.99 | 16.74 | [link](https://drive.google.com/file/d/19q73qCw1XGTWhmHrFTtr-PxbNTXnJUy0/view?usp=sharing) |
 
 
 - Run Evaluation w/ R50 in COCO
 ```shell
 python train_net.py \
       --eval-only \
-      --num-gpus 4 \
+      --num-gpus 1 \
       --config configs/mum_configs/coco.yaml \
       MODEL.WEIGHTS <your weight>.pth
 ```
@@ -88,7 +80,7 @@ python train_net.py \
 ```shell
 python train_net.py \
       --eval-only \
-      --num-gpus 4 \
+      --num-gpus 1 \
       --config configs/mum_configs/voc.yaml \
       MODEL.WEIGHTS <your weight>.pth
 ```
@@ -97,7 +89,7 @@ python train_net.py \
 ```shell
 python train_net.py \
       --eval-only \
-      --num-gpus 4 \
+      --num-gpus 1 \
       --config configs/mum_configs/coco_swin.yaml \
       MODEL.WEIGHTS <your weight>.pth
 ```
@@ -136,7 +128,7 @@ mv swin_tiny_patch4_window7_224.pth weights/
 # Evaluate in COCO
 python train_net.py \
       --eval-only \
-      --num-gpus 4 \
+      --num-gpus 1 \
       --config configs/mum_configs/coco_swin.yaml \
       MODEL.WEIGHTS <your weight>.pth
       
@@ -144,61 +136,55 @@ python train_net.py \
 python train_net.py \
       --num-gpus 4 \
       --config configs/mum_configs/coco_swin.yaml \
-
 ```
 
 ## Mix/UnMix code block
 
 - Mix images tiles
 ```shell
-# Generate tile mask (BS//NT, NT, TH, TW)
-mask = torch.argsort(torch.rand(bs // nt, nt, ts, ts), dim=1).cuda()
+# Generate mix mask (BS//NG, NG, NT, NT)
+mask = torch.argsort(torch.rand(bs // ng, ng, nt, nt), dim=1).cuda()
 
-# Repeat tile mask to make image shape (BS//NT, NT, 3, H, W)
-img_mask = mask.view(bs // nt, nt, 1, ts, ts)
+# Repeat mix mask to make image shape (BS//NG, NG, 3, H, W)
+img_mask = mask.view(bs // ng, ng, 1, nt, nt)
 img_mask = img_mask.repeat_interleave(3, dim=2)
-img_mask = img_mask.repeat_interleave(h // ts, dim=3)
-img_mask = img_mask.repeat_interleave(w // ts, dim=4)
+img_mask = img_mask.repeat_interleave(h // nt, dim=3)
+img_mask = img_mask.repeat_interleave(w // nt, dim=4)
 
-# Tiling image
-img_tiled = images.tensor.view(bs // nt, nt, c, h, w)
+# Mixing image tiles
+img_tiled = images.tensor.view(bs // ng, ng, c, h, w)
 img_tiled = torch.gather(img_tiled, dim=1, index=img_mask)
 img_tiled = img_tiled.view(bs, c, h, w)
-
 ```
 
 - Unmix Feature tiles 
 ```shell
-
 bs, c, h, w = feat.shape
 
-# Make feature shape multiple of ts 
-h_ = h//ts * ts
-w_ = w//ts * ts
+# Make feature shape multiple of NT 
+h_ = h//nt * nt
+w_ = w//nt * nt
 
 if h_ == 0:
-    h_ = ts
+    h_ = nt
 if w_ == 0:
-    w_ = ts
+    w_ = nt
 
 if h != h_ or w != w_:
     feat = torch.nn.functional.interpolate(feat, size=(h_, w_), mode='bilinear')
 
-# Generate inverse mask to untile
+# Generate inverse mask to unmix
 inv_mask = torch.argsort(mask, dim=1).cuda()
 
-feat_tiled = feat.view(bs//nt,nt,c,h_,w_)
-feat_mask = inv_mask.view(bs//nt,nt,1,ts,ts)
+feat_tiled = feat.view(bs//ng,ng,c,h_,w_)
+feat_mask = inv_mask.view(bs//ng,ng,1,nt,nt)
 feat_mask = feat_mask.repeat_interleave(c,dim=2)
-feat_mask = feat_mask.repeat_interleave(h_//ts, dim=3)
-feat_mask = feat_mask.repeat_interleave(w_//ts, dim=4)
+feat_mask = feat_mask.repeat_interleave(h_//nt, dim=3)
+feat_mask = feat_mask.repeat_interleave(w_//nt, dim=4)
 
-# Untile feature
+# Unmix feature tiles 
 feat_tiled = torch.gather(feat_tiled, dim=1, index=feat_mask)
 feat_tiled = feat_tiled.view(bs,c,h_,w_)
 if h != h_:
     feat_tiled = torch.nn.functional.interpolate(feat_tiled, size=(h, w), mode='bilinear')
-
-
-
 ```

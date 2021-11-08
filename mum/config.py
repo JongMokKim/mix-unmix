@@ -49,8 +49,8 @@ def add_ubteacher_config(cfg):
 
     ## My Custom
     _C.SEMISUPNET.TYPE = "base" # tile, base,,,
-    _C.SEMISUPNET.TS = 4
     _C.SEMISUPNET.NT = 4
+    _C.SEMISUPNET.NG = 4
     _C.SEMISUPNET.LAMBDA_FEAT = 1e-2
     _C.SEMISUPNET.LAMBDA_REL = 1e-2
     _C.SEMISUPNET.GI_TYPE = "gifeat"
