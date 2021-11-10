@@ -85,17 +85,6 @@ python train_net.py \
       MODEL.WEIGHTS <your weight>.pth
 ```
 
-- Run Evaluation w/ Swin in COCO
-```shell
-python train_net.py \
-      --eval-only \
-      --num-gpus 1 \
-      --config configs/mum_configs/coco_swin.yaml \
-      MODEL.WEIGHTS <your weight>.pth
-```
-
-
-
 # Train
 We use 4 GPUs (A6000 or V100 32GB) to achieve the paper results.   
 - Train the MUM under 1% COCO-supervision (ResNet-50)
@@ -112,27 +101,25 @@ python train_net.py \
       --config configs/mum_configs/voc.yaml \
 ```
 
-- Train the MUM under 0.5% COCO-supervision (Swin)
-```shell
-python train_net.py \
-      --num-gpus 4 \
-      --config configs/mum_configs/coco_swin.yaml \
-```
-
 ## Swin 
 - Download ImageNet pretrained weight of swin-t in [link](https://drive.google.com/file/d/1j95KPUoVl1PK49yxpQOvigKHcl2eTt5B/view?usp=sharing)
+- mv pretrained weight to weights folder
 ```shell
-# mv pretrained weight to weights folder
 mv swin_tiny_patch4_window7_224.pth weights/
+```
 
-# Evaluate in COCO
+- Run Evaluation w/ Swin in COCO
+```shell
 python train_net.py \
       --eval-only \
       --num-gpus 1 \
       --config configs/mum_configs/coco_swin.yaml \
       MODEL.WEIGHTS <your weight>.pth
       
-# Train under 0.5% COCO-supervision
+```
+
+- Train under 0.5% COCO-supervision
+```shell
 python train_net.py \
       --num-gpus 4 \
       --config configs/mum_configs/coco_swin.yaml \
@@ -140,51 +127,37 @@ python train_net.py \
 
 ## Mix/UnMix code block
 
-- Mix images tiles
+### Mixing code block
+- Generate mix mask 
 ```shell
-# Generate mix mask (BS//NG, NG, NT, NT)
 mask = torch.argsort(torch.rand(bs // ng, ng, nt, nt), dim=1).cuda()
-
-# Repeat mix mask to make image shape (BS//NG, NG, 3, H, W)
 img_mask = mask.view(bs // ng, ng, 1, nt, nt)
 img_mask = img_mask.repeat_interleave(3, dim=2)
 img_mask = img_mask.repeat_interleave(h // nt, dim=3)
 img_mask = img_mask.repeat_interleave(w // nt, dim=4)
+```
 
-# Mixing image tiles
+- Mixing image tiles
+```shell
 img_tiled = images.tensor.view(bs // ng, ng, c, h, w)
 img_tiled = torch.gather(img_tiled, dim=1, index=img_mask)
 img_tiled = img_tiled.view(bs, c, h, w)
 ```
 
-- Unmix Feature tiles 
+### Unmixing  code block
+
+- Generate inverse mask to unmix
 ```shell
-bs, c, h, w = feat.shape
-
-# Make feature shape multiple of NT 
-h_ = h//nt * nt
-w_ = w//nt * nt
-
-if h_ == 0:
-    h_ = nt
-if w_ == 0:
-    w_ = nt
-
-if h != h_ or w != w_:
-    feat = torch.nn.functional.interpolate(feat, size=(h_, w_), mode='bilinear')
-
-# Generate inverse mask to unmix
 inv_mask = torch.argsort(mask, dim=1).cuda()
-
-feat_tiled = feat.view(bs//ng,ng,c,h_,w_)
 feat_mask = inv_mask.view(bs//ng,ng,1,nt,nt)
 feat_mask = feat_mask.repeat_interleave(c,dim=2)
-feat_mask = feat_mask.repeat_interleave(h_//nt, dim=3)
-feat_mask = feat_mask.repeat_interleave(w_//nt, dim=4)
+feat_mask = feat_mask.repeat_interleave(h//nt, dim=3)
+feat_mask = feat_mask.repeat_interleave(w//nt, dim=4)
+```
 
-# Unmix feature tiles 
+- Unmixing feature tiles
+```shell
+feat_tiled = feat.view(bs//ng,ng,c,h,w)
 feat_tiled = torch.gather(feat_tiled, dim=1, index=feat_mask)
-feat_tiled = feat_tiled.view(bs,c,h_,w_)
-if h != h_:
-    feat_tiled = torch.nn.functional.interpolate(feat_tiled, size=(h, w), mode='bilinear')
+feat_tiled = feat_tiled.view(bs,c,h,w)
 ```
