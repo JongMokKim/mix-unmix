@@ -1,3 +1,6 @@
+# Download the code
+- For your convenience in anonymous github, we provide the code and model weights in [zip](https://drive.google.com/file/d/18AS8by_YOpQwQURgQelIFl8WqHgteiJt/view?usp=sharing)
+
 # Installtion & Setup
 We follow the installation precess of Unbiased Teacher official repo (https://github.com/facebookresearch/unbiased-teacher)
 
@@ -53,10 +56,8 @@ mix-unmix/
         └── JPEGImages
 
 ```
-
 # Evaluation
-
-- Model Weights
+- Performance table and Model Weights (weight files are already included in zip file)
 
 |  Backbone  | Protocols |         AP50  |  AP50:95      |                                       Model Weights                                        |
 | :-----: | :---------: | :---: | :---: | :----------------------------------------------------------------------------------------: |
@@ -64,7 +65,7 @@ mix-unmix/
 | R50-FPN |     COCO-Additional       |  63.30 | 42.11 | [link](https://drive.google.com/file/d/1GhQlkurzdRAngdMp6Ut492TYD2AN20XB/view?usp=sharing) |
 | R50-FPN |     VOC07 (VOC12)       |  78.94  | 50.22 | [link](https://drive.google.com/file/d/1HVAMThGp9SR5BpmQEBFautuF_pQlkkQW/view?usp=sharing) |
 | R50-FPN |     VOC07 (VOC12 / COCO20cls)  | 80.45 | 52.31 | [link](https://drive.google.com/file/d/1Ywlnnxfi3fYwZK5jZKY7a8E7R0KP1SUs/view?usp=sharing) |
-| Swin    |     COCO-Standard 0.5%    | 33.99 | 16.74 | [link](https://drive.google.com/file/d/19q73qCw1XGTWhmHrFTtr-PxbNTXnJUy0/view?usp=sharing) |
+| Swin    |     COCO-Standard 0.5%    | 34.25 | 16.52 | [link](https://drive.google.com/file/d/1EsHK3FRCzBlt-pcaIf93agfxdQJE6Idz/view?usp=sharing) |
 
 
 - Run Evaluation w/ R50 in COCO
@@ -73,7 +74,7 @@ python train_net.py \
       --eval-only \
       --num-gpus 1 \
       --config configs/mum_configs/coco.yaml \
-      MODEL.WEIGHTS <your weight>.pth
+      MODEL.WEIGHTS weights/<your weight>.pth
 ```
 
 - Run Evaluation w/ R50 in VOC
@@ -82,7 +83,7 @@ python train_net.py \
       --eval-only \
       --num-gpus 1 \
       --config configs/mum_configs/voc.yaml \
-      MODEL.WEIGHTS <your weight>.pth
+      MODEL.WEIGHTS weights/<your weight>.pth
 ```
 
 # Train
@@ -114,7 +115,7 @@ python train_net.py \
       --eval-only \
       --num-gpus 1 \
       --config configs/mum_configs/coco_swin.yaml \
-      MODEL.WEIGHTS <your weight>.pth
+      MODEL.WEIGHTS weights/<your weight>.pth
       
 ```
 
@@ -161,3 +162,9 @@ feat_tiled = feat.view(bs//ng,ng,c,h,w)
 feat_tiled = torch.gather(feat_tiled, dim=1, index=feat_mask)
 feat_tiled = feat_tiled.view(bs,c,h,w)
 ```
+
+# Acknowledgements
+We use Unbiased-teacher official code as our baseline. 
+And also we use Timm repository to implement Swin Transformer easily.
+- [Unbiased-Teacher](https://github.com/facebookresearch/unbiased-teacher)
+- [Timm](https://github.com/rwightman/pytorch-image-models)
