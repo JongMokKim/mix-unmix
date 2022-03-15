@@ -1,6 +1,6 @@
 # MUM : Mix Image Tiles and UnMix Feature Tiles for Semi-Supervised Object Detection (CVPR2022) [[Arxiv](https://arxiv.org/abs/2111.10958)]
 
-
+<img src="teaser/mum_phase.png>
 
 
 # Installtion & Setup
