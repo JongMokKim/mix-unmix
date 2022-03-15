@@ -1,8 +1,13 @@
-# Download the code
-- For your convenience in anonymous github, we provide the code and model weights in [zip](https://drive.google.com/file/d/18AS8by_YOpQwQURgQelIFl8WqHgteiJt/view?usp=sharing)
+# MUM : Mix Image Tiles and UnMix Feature Tiles for Semi-Supervised Object Detection (CVPR2022) [Arxiv](https://arxiv.org/abs/2111.10958)
+
+
+
 
 # Installtion & Setup
 We follow the installation precess of Unbiased Teacher official repo (https://github.com/facebookresearch/unbiased-teacher)
+
+## Download the code
+- For your convenience, we provide the code and model weights in [zip](https://drive.google.com/file/d/18AS8by_YOpQwQURgQelIFl8WqHgteiJt/view?usp=sharing)
 
 ### Prerequisites
 
