@@ -1,7 +1,12 @@
-# MUM : Mix Image Tiles and UnMix Feature Tiles for Semi-Supervised Object Detection (CVPR2022) [[Arxiv](https://arxiv.org/abs/2111.10958)]
+# MUM : Mix Image Tiles and UnMix Feature Tiles for Semi-Supervised Object Detection (CVPR2022) 
+This is the Pytorch implementation of our paper : <br>
+**MUM : Mix Image Tiles and UnMix Feature Tiles for Semi-Supervised Object Detection** <br>
+IEEE/CVF International Conference on Computer Vision (CVPR), 2022 <br>
+[[arXiv](https://arxiv.org/abs/2111.10958)]
 
-<img src="teaser/mum_phase.png>
-
+<p align="center">
+<img src="teaser/mum_phase.png", width="85%">
+          </p>
 
 # Installtion & Setup
 We follow the installation precess of Unbiased Teacher official repo (https://github.com/facebookresearch/unbiased-teacher)
